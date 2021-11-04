@@ -1,0 +1,21 @@
+name: mibi_processing
+channels:
+  - defaults
+dependencies:
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - scikit-image
+  - jupyterlab
+  - openpyxl
+  - tifffile
+  - matplotlib
+  - seaborn
+  - py-opencv
+  - pip
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pip:
+    - mat73
+    - medpy

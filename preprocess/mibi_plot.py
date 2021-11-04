@@ -1,184 +1,119 @@
-import os
-import argparse
-
-from tifffile import TiffFile
-
 import numpy as np
 import pandas as pd
 
-from scipy.ndimage import gaussian_filter
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-from sklearn.linear_model import Ridge
+from mibi_image import MIBIMultiplexImage
 
-from knn_denoise import knn_denoise
-
-LABEL_DESC = {'12_C':'Carbon',
-              '23_Na':'Sodium',
-              '28_Si':'Silicon',
-              '31_P':'Phosphorous',
-              '38_calib':'Calibration',
-              '40_Ca':'Calcium',
-              '56_Fe':'Iron',
-              'nuclear':'Nuclear',
-              'B7H3':'B7H3 T-cell Checkpoint',
-              'EGFR':'Growth Factor Receptor',
-              'IL13RA2':'Tumor Associated',
-              'NeuN':'Neuron',
-              'Epha2':'Tumor Marker?',
-              'CD3':'T-cell Marker',
-              'MMP2':'ECM Degredation',
-              'H3K27M':'Diffuse Glioma Marker',
-              'CD86':'B7 Immune Co-stimulation',
-              'CD14':'Macrophage Marker',
-              'CD45':'Immune Marker',
-              'CD123':'IL3 Receptor',
-              'GFAP':'Astrocyte Marker',
-              '181_Ta':'Tantalum',
-              '197_Au':'Gold'
-            }
+def clean_trans(trans_func, x):
+    y = trans_func(x)
+    i = np.isnan(y) | np.isinf(y)
+    y[i] = 0.
+    y[y < 0] = 0.
+    return y
 
 
-class MIBIMultiplexImage(object):
+def plot_hist(img : np.ndarray, ax=None, exclude_zeros=True, channel_label=''):
+    if ax is None:
+        ax = plt.gca()
+    i = img > 0
+    zero_frac = (~i).sum() / np.prod(img.shape)
+    if exclude_zeros:
+        x = img[i].ravel()
+    else:
+        x = img.ravel()
+    sns.histplot(x, bins=25, ax=ax)
+    plt.title(f"{channel_label}; zfrac={zero_frac:.2f}")
+    ax.set_yscale('log')
 
-    def __init__(self):
-        self.X = None
-        self.X_bgsub = dict()
-        self.X_thresh = dict()
-        self.X_denoise = dict()
-        
-        self.df_channel = None
+
+def plot_img(img : np.ndarray, title='', transform=True):
+    if transform:
+        img_trans = clean_trans(np.arcsinh, img)
+    else:
+        img_trans = img
+    nz = img_trans > 0
+    vmax = np.percentile(img_trans[nz].ravel(), 95)
+    plt.imshow(img_trans, interpolation='nearest', aspect='auto', cmap=plt.cm.afmhot, vmin=0, vmax=vmax)
+    plt.xlabel('')
+    plt.ylabel('')
+    plt.xticks([]) 
+    plt.yticks([])
+    plt.colorbar()
+    plt.title(title)
+
+
+def plot_intensity_vs_area(df_region, ax, area_thresh=3):
+    i = df_region['convex_area'] > area_thresh
+    if i.sum() > 0:
+        try:
+            sns.kdeplot(data=df_region[i], x='mean_intensity', y='convex_area', ax=ax, fill=True)
+            sns.scatterplot(x='mean_intensity', y='convex_area', data=df_region[i], ax=ax, alpha=0.1, color='k')                         
+            plt.yscale('log')
+        except:
+            print(f"Error with kdeplot, i.sum()={i.sum()}")
+
+
+def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, transform=True,
+                    show_raw=True, show_hist=True, show_bgsub=False,
+                    show_threshold=False, show_denoised=True,
+                    plot_height=4, plot_width=3, output_file=None):
+
+    chan_indices = list()
+    if exclude_ignored_channels:
+        chan_indices.extend(mp_img.included_channel_indices())
+    else:
+        chan_indices = mp_img.df_channel.index.values
+
+    ncols = np.sum([show_hist, show_raw, show_bgsub, show_threshold, show_denoised])
+    nrows = len(chan_indices)
+    fig_width = plot_height*ncols
+    fig_height = plot_width*nrows
     
-        self.gold_channel_label = '197_Au'
-        self.ignored_channel_labels = ['12_C', '23_Na', '28_Si', '31_P', '38_calib', '40_Ca', '56_Fe', '181_Ta']
-        self.label_to_index = dict()
-    
-    @staticmethod
-    def load_from_path(img_dir, channels_data_path, smooth=True):
-        mp_img = MIBIMultiplexImage()
-        
-        mp_img.df_channel = pd.read_csv(channels_data_path)
-        mp_img.df_channel['Description'] = mp_img.df_channel['Label'].map(lambda x: LABEL_DESC[x])
+    fig = plt.figure(figsize=(fig_width, fig_height))
+    gs = plt.GridSpec(nrows, ncols)
 
-        mp_img.label_to_index = {row['Label']:row_idx for row_idx,row in mp_img.df_channel.iterrows()}
+    for row,chan_idx in enumerate(chan_indices):
 
-        images = list()
-        for lbl in mp_img.df_channel['Label']:
-            tiff_file = os.path.join(img_dir, f'{lbl}.tif')
-            if not os.path.exists(tiff_file):
-                print('Missing channel: {tiff_file}')
-                img = np.zeros([1024, 1024])*np.nan
-            else:
-                tf = TiffFile(tiff_file)
-                img = tf.asarray()
+        chan_label = mp_img.df_channel.loc[chan_idx]['Label']
+        chan_desc = mp_img.df_channel.loc[chan_idx]['Description']
+        side_title = f"{chan_label}: {chan_desc}"
 
-            if smooth:
-                img = gaussian_filter(img.astype('float32'), sigma=1)
+        col = 0
+        if show_hist:
+            ax = fig.add_subplot(gs[row, col])
+            plot_hist(mp_img.X[chan_idx, :, :], exclude_zeros=True, ax=ax)
+            if col == 0:
+                plt.ylabel(side_title)
+            col += 1
+        if show_raw:
+            ax = fig.add_subplot(gs[row, col])
+            plot_img(mp_img.X[chan_idx, :, :], title='RAW', transform=transform)
+            if col == 0:
+                plt.ylabel(side_title)
+            col += 1
+        if show_bgsub:
+            ax = fig.add_subplot(gs[row, col])
+            plot_img(mp_img.X_bgsub[chan_idx], title='BG_SUBTRACTED', transform=transform)
+            if col == 0:
+                plt.ylabel(side_title)
+            col += 1
+        if show_threshold:
+            ax = fig.add_subplot(gs[row, col])
+            plot_img(mp_img.X_thresh[chan_idx], title='THRESHOLDED', transform=transform)
+            if col == 0:
+                plt.ylabel(side_title)
+            col += 1
+        if show_denoised:
+            ax = fig.add_subplot(gs[row, col])
+            plot_img(mp_img.X_denoise[chan_idx], title='DENOISED', transform=transform)
+            if col == 0:
+                plt.ylabel(side_title)
+            col += 1
 
-            images.append(img)
+    plt.tight_layout()
 
-        mp_img.X = np.array(images)
-    
-        return mp_img
-
-    def included_channel_indices(self):
-        """ Get indices of channels that are to be processed and displayed (except gold channel).
-            The index of an element in self.df_channel matches the index of an image in self.X
-        """
-        channels_to_include = np.setdiff1d(self.df_channel['Label'],
-                                           self.ignored_channel_labels + [self.gold_channel_label])
-        i = self.df_channel['Label'].isin(channels_to_include)
-        return self.df_channel.index[i].values
-    
-    def bg_subtract(self, debug=False):
-
-        # identify channels that would add noise
-        channel_dependencies = dict()
-        channels_to_include = self.included_channel_indices()
-        gold_channel_index = self.label_to_index[self.gold_channel_label]
-        
-        df_deps = self.df_channel.loc[list(channels_to_include) + [gold_channel_index]]
-
-        for chan_idx in channels_to_include:
-            
-            deps = [gold_channel_index]
-            chan_info = self.df_channel.loc[chan_idx]
-
-            # get -1 channel index
-            baseline_start = chan_info['BaselineStart']
-            bdiff = (baseline_start - df_deps['BaselineStart'])
-            i = (bdiff < 2) & (bdiff > 0)
-            if i.sum() > 0:
-                deps.extend(df_deps.loc[i].index)
-            
-            # get -16 channel index
-            i = (bdiff > 15) & (bdiff < 17)
-            if i.sum() > 0:
-                deps.extend(df_deps.loc[i].index)
-            
-            channel_dependencies[chan_idx] = deps
-
-        # get coefficients using ridge regression for each image
-        coefs = dict()
-        for chan_idx,deps in channel_dependencies.items():
-            chan_label = self.df_channel.loc[chan_idx]['Label']
-            dep_names = ', '.join([self.df_channel.loc[k]['Label'] for k in deps])
-            if debug:
-                print(f'Regressing on {chan_label}, deps={dep_names}')
-            y = self.X[chan_idx, :, :].ravel()
-            R = self.X[deps, :, :].reshape([len(deps), -1]).T
-
-            rr = Ridge(fit_intercept=False, positive=True)
-            rr.fit(R, y)
-            coefs[chan_idx] = rr.coef_
-        self.bgsub_coefs = coefs
-
-        # perform background subtraction using regression coefficients 
-        self.X_bgsub = dict()
-        for chan_idx, weights in coefs.items():
-            img = self.X[chan_idx, :, :].copy()
-            deps = channel_dependencies[chan_idx]
-            for dep_chan_idx,w in zip(deps, weights):
-                S = self.X[dep_chan_idx, :, :]
-                img -= w*S
-            img[img < 0] = 0
-            self.X_bgsub[chan_idx] = img
-
-    def threshold(self, percentile_threshold=50, debug=False):
-        """ Threshold out all pixels below the given percentile of the channel's intensity histogram. """
-        self.X_thresh = dict()
-
-        for chan_idx,img in self.X_bgsub.items():
-            nz = img > 0
-            thresh = np.percentile(img[nz].ravel(), percentile_threshold)
-            if debug:
-                print(f"{self.df_channel.loc[chan_idx]['Label']} q{percentile_threshold}={thresh:0.3f}")
-            q_img = img.copy() 
-            q_img[q_img < thresh] = 0.
-            self.X_thresh[chan_idx] = q_img
-
-    def denoise(self):
-        self.X_denoise = dict()
-        for chan_idx,img in self.X_thresh.items():
-            self.X_denoise[chan_idx] = knn_denoise(img)
-
-    def preprocess(self, debug=False):
-        self.bg_subtract(debug=debug)
-        self.threshold(debug=debug)
-        self.denoise()
-
-
-def main(args):
-    pass
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run FastICA on a set of .tiff files in a directory.')
-    parser.add_argument('--input_dir', type=str, help="A directory that contains tiff files.")
-    parser.add_argument('--output_dir', type=str, help="Directory to write output tiff files to")
-    parser.add_argument('--smooth', type=bool, help="Smooth inputs with 1px Gaussian before ICA", default=False)
-    parser.add_argument('--files', default=None,
-                        help='Comma-separated list of filenames within input_dir to process.')
-
-    args = parser.parse_args()
-
-    main(args)
+    if output_file is not None:
+        fig.savefig(output_file)
+    return fig
