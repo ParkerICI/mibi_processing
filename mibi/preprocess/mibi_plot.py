@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from mibi_image import MIBIMultiplexImage
+from .mibi_image import MIBIMultiplexImage
 
 def clean_trans(trans_func, x):
     y = trans_func(x)
