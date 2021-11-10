@@ -74,5 +74,5 @@ class BackgroundSubtractionDataset(Dataset):
 
         row = self.df.loc[index]
 
-        return (self.gold_patches[row['point_name']][row['patch_index']],
-                self.chan_patches[row['point_name']][row['channel_local_index']][row['patch_index']])
+        return (self.gold_patches[row['point_name']][row['patch_index']].unsqueeze(0),
+                self.chan_patches[row['point_name']][row['channel_local_index']][row['patch_index']].unsqueeze(0))

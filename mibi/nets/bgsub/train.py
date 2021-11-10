@@ -16,25 +16,19 @@ dir_checkpoint = Path('./checkpoints/')
 
 def train_net(net,
               device,
+              dataset,
               epochs: int = 5,
               batch_size: int = 1,
               learning_rate: float = 0.001,
               val_percent: float = 0.1,
-              save_checkpoint: bool = True,
-              img_scale: float = 0.5,
-              amp: bool = False):
-    # 1. Create dataset
-    try:
-        dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
-    except (AssertionError, RuntimeError):
-        dataset = BasicDataset(dir_img, dir_mask, img_scale)
-
-    # 2. Split into train / validation partitions
+              save_checkpoint: bool = True):
+    
+    # 1. Split into train / validation partitions
     n_val = int(len(dataset) * val_percent)
     n_train = len(dataset) - n_val
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
-    # 3. Create data loaders
+    # 2. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=4, pin_memory=True)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
@@ -47,18 +41,14 @@ def train_net(net,
         Validation size: {n_val}
         Checkpoints:     {save_checkpoint}
         Device:          {device.type}
-        Images scaling:  {img_scale}
-        Mixed Precision: {amp}
     ''')
 
-    # 4. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
+    # 3. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
     optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)  # goal: maximize Dice score
-    grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.CrossEntropyLoss()
     global_step = 0
 
-    # 5. Begin training
+    # 4. Begin training
     for epoch in range(epochs):
         net.train()
         epoch_loss = 0
@@ -74,6 +64,8 @@ def train_net(net,
 
             images = images.to(device=device, dtype=torch.float32)
             true_masks = true_masks.to(device=device, dtype=torch.long)
+
+            img_pred = net()
 
             with torch.cuda.amp.autocast(enabled=amp):
                 masks_pred = net(images)
