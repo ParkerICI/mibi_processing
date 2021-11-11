@@ -9,22 +9,33 @@ import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 
-dir_img = Path('./data/imgs/')
-dir_mask = Path('./data/masks/')
-dir_checkpoint = Path('./checkpoints/')
+from pytorch_msssim import MS_SSIM
 
+from .dataset import BackgroundSubtractionDataset
+from .network import BGSubAndDenoisier
+
+DEFAULT_LOSS_PARAMS = {
+                       size_average: True,
+                       win_size: 11,
+                       win_sigma: 1.5,
+                       channel: 1,
+                       spatial_dims: 2,
+                       weights: None,
+                       K: (0.01, 0.03)
+                      }
 
 def train_net(net,
               device,
-              dataset,
+              dataset : BackgroundSubtractionDataset,
               epochs: int = 5,
-              batch_size: int = 1,
+              batch_size: int = 7,
               learning_rate: float = 0.001,
-              val_percent: float = 0.1,
-              save_checkpoint: bool = True):
+              weight_decay: float = 1,
+              validation_fraction: float = 0.1,
+              loss_params: dict = DEFAULT_LOSS_PARAMS):
     
     # 1. Split into train / validation partitions
-    n_val = int(len(dataset) * val_percent)
+    n_val = int(len(dataset) * validation_fraction)
     n_train = len(dataset) - n_val
     train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
@@ -37,115 +48,101 @@ def train_net(net,
         Epochs:          {epochs}
         Batch size:      {batch_size}
         Learning rate:   {learning_rate}
+        Decay rate:      {weight_decay}
         Training size:   {n_train}
         Validation size: {n_val}
-        Checkpoints:     {save_checkpoint}
         Device:          {device.type}
     ''')
 
     # 3. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    optimizer = optim.RMSprop(net.parameters(), lr=learning_rate, weight_decay=1e-8, momentum=0.9)
-    criterion = nn.CrossEntropyLoss()
-    global_step = 0
+    ms_ssim_loss = MS_SSIM(data_range=dataset.range[1], **loss_params)
+
+    optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     # 4. Begin training
-    for epoch in range(epochs):
-        net.train()
-        epoch_loss = 0
+    all_losses = list()
+    for epoch_num in range(epochs):
+        epoch_losses = list()
 
-        for batch in train_loader:
-            images = batch['image']
-            true_masks = batch['mask']
+        for batch_num,(bg_batch,chan_batch) in enumerate(train_loader):
+            bg_batch = bg_batch.to(device=device, dtype=torch.float32)
+            chan_batch = chan_batch.to(device=device, dtype=torch.float32)
 
-            assert images.shape[1] == net.n_channels, \
-                f'Network has been defined with {net.n_channels} input channels, ' \
-                f'but loaded images have {images.shape[1]} channels. Please check that ' \
-                'the images are loaded correctly.'
+            transformed_batch = net(chan_batch, bg_batch)
 
-            images = images.to(device=device, dtype=torch.float32)
-            true_masks = true_masks.to(device=device, dtype=torch.long)
+            bg_sim = ms_ssim_loss(transformed_batch, bg_batch)
+            chan_sim = ms_ssim_loss(transformed_batch, chan_batch)
 
-            img_pred = net()
+            loss = 0.5*bg_sim - 0.5*chan_sim
 
-            with torch.cuda.amp.autocast(enabled=amp):
-                masks_pred = net(images)
-                loss = criterion(masks_pred, true_masks) \
-                        + dice_loss(F.softmax(masks_pred, dim=1).float(),
-                                    F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float(),
-                                    multiclass=True)
+            epoch_losses.append(loss)
 
-            optimizer.zero_grad(set_to_none=True)
-            grad_scaler.scale(loss).backward()
-            grad_scaler.step(optimizer)
-            grad_scaler.update()
+            if batch_num % 5 == 0:
+                print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}")
 
-            global_step += 1
-            epoch_loss += loss.item()
+            loss.backward()
+            optimizer.step()
 
-            logging.info(f"train loss: {loss.item()} | step {global_step} | epoch {epoch}")
-
-            # Evaluation round
-            division_step = (n_train // (10 * batch_size))
-            if division_step > 0:
-                if global_step % division_step == 0:
-                    val_score = evaluate(net, val_loader, device)
-                    scheduler.step(val_score)
-
-                    logging.info('Validation Dice score: {}'.format(val_score))
-
-        if save_checkpoint:
-            Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
-            torch.save(net.state_dict(), str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch + 1)))
-            logging.info(f'Checkpoint {epoch + 1} saved!')
+        all_losses.append(epoch_losses)
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
-    parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
-    parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=0.00001,
-                        help='Learning rate', dest='lr')
-    parser.add_argument('--load', '-f', type=str, default=False, help='Load model from a .pth file')
-    parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
-    parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
-                        help='Percent of the data that is used as validation (0-100)')
-    parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
+    parser.add_argument('--images_dir', type=int, default=5, help='Base directory where sets of images reside.')
+    parser.add_argument('--channel_file', type=int, default=5, help='Path to channel info file')
+    parser.add_argument('--epochs', type=int, default=5, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
+    parser.add_argument('--learning_rate', type=float, default=0.00001,
+                        help='Learning rate')
+    parser.add_argument('--validation', type=float, default=0.1,
+                        help='Fraction of the data that is used as validation (0-1)')
+    parser.add_argument('--loss_win_size', type=float, default=11,
+                        help='Window size for MS_SSIM loss')
+    parser.add_argument('--loss_win_sigma', type=float, default=1.5,
+                        help='Window size for MS_SSIM loss')
+    parser.add_argument('--loss_K1', type=float, default=0.01,
+                        help='K1 param for MS_SSIM loss')
+    parser.add_argument('--loss_K2', type=float, default=0.03,
+                        help='K2 param for MS_SSIM loss')
+
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    args = get_args()
+def main(args):
 
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    logging.info(f'Using device {device}')
+    print(f'Using device {device}')
 
-    # Change here to adapt to your data
-    # n_channels=3 for RGB images
-    # n_classes is the number of probabilities you want to get per pixel
-    net = UNet(n_channels=1, n_classes=2, bilinear=True)
-
-    logging.info(f'Network:\n'
-                 f'\t{net.n_channels} input channels\n'
-                 f'\t{net.n_classes} output channels (classes)\n'
-                 f'\t{"Bilinear" if net.bilinear else "Transposed conv"} upscaling')
-
-    if args.load:
-        net.load_state_dict(torch.load(args.load, map_location=device))
-        logging.info(f'Model loaded from {args.load}')
+    ds = BackgroundSubtractionDataset(args.images_dir, args.channel_file)
+    net = BGSubAndDenoisier()
 
     net.to(device=device)
+
+    loss_params = DEFAULT_LOSS_PARAMS
+    loss_params['win_size'] = args.loss_win_size
+    loss_params['win_sigma'] = args.loss_win_sigma
+    loss_params['K'] = (args.loss_K1, args.loss_K2)
+
     try:
+        
         train_net(net=net,
+                  device=device,
+                  dataset=ds,
                   epochs=args.epochs,
                   batch_size=args.batch_size,
-                  learning_rate=args.lr,
-                  device=device,
-                  img_scale=args.scale,
-                  val_percent=args.val / 100,
-                  amp=args.amp)
+                  learning_rate=args.learning_rate,
+                  weight_decay=args.weight_decay,
+                  validation_fraction=args.validation_fraction,
+                  loss_params=loss_params)
+
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pth')
         logging.info('Saved interrupt')
         sys.exit(0)
+
+
+if __name__ == '__main__':
+    args = get_args()
+    main(args)
+    

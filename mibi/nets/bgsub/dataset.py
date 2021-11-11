@@ -28,6 +28,7 @@ class BackgroundSubtractionDataset(Dataset):
         
         self.gold_patches = dict()
         self.chan_patches = dict()
+        self.range = (0, 0)
 
         pm = PatchMaker(image_size=image_size, kernel_size=patch_size, stride=patch_stride)
 
@@ -46,12 +47,24 @@ class BackgroundSubtractionDataset(Dataset):
             # get gold channel image, patchify
             gold_chan_idx = mp_img.label_to_index[gold_channel_label]
             self.gold_patches[pname] = patch_and_swap(pm, mp_img.X[gold_chan_idx, :, :])
+
+            self.range[0] = min(self.range[0],
+                                self.gold_patches[pname].min())
+
+            self.range[1] = max(self.range[1],
+                                self.gold_patches[pname].max())
             
             # get other channel images, patchify
             patches = list()
             for chan_idx in mp_img.included_channel_indices():
                 patches.append(patch_and_swap(pm, mp_img.X[chan_idx, :, :]))
             self.chan_patches[pname] = torch.stack(patches)
+
+            self.range[0] = min(self.range[0],
+                                self.chan_patches[pname].min())
+
+            self.range[1] = max(self.range[1],
+                                self.chan_patches[pname].max())
 
             # fill up the data frame with info
             num_patches = self.chan_patches[pname].shape[1]
