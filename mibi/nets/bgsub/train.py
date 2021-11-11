@@ -1,27 +1,24 @@
 import argparse
 import logging
 import sys
-from pathlib import Path
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 
 from pytorch_msssim import MS_SSIM
 
-from .dataset import BackgroundSubtractionDataset
-from .network import BGSubAndDenoisier
+from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
+from mibi.nets.bgsub.network import BGSubAndDenoisier
 
 DEFAULT_LOSS_PARAMS = {
-                       size_average: True,
-                       win_size: 11,
-                       win_sigma: 1.5,
-                       channel: 1,
-                       spatial_dims: 2,
-                       weights: None,
-                       K: (0.01, 0.03)
+                       "size_average": True,
+                       "win_size": 11,
+                       "win_sigma": 1.5,
+                       "channel": 1,
+                       "spatial_dims": 2,
+                       "weights": None,
+                       "K": (0.01, 0.03)
                       }
 
 def train_net(net,
@@ -85,15 +82,22 @@ def train_net(net,
 
         all_losses.append(epoch_losses)
 
+    # save trained model
+    torch.save(net.state_dict(), "bgsub+noise_net.dict.zip")
+
 
 def get_args():
-    parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--images_dir', type=int, default=5, help='Base directory where sets of images reside.')
-    parser.add_argument('--channel_file', type=int, default=5, help='Path to channel info file')
+    parser = argparse.ArgumentParser(description='Train the bgsub+denoising model on a set of MIBI images')
+    parser.add_argument('--images_dir', type=str, help='Base directory where sets of images reside.',
+                        required=True)
+    parser.add_argument('--channel_file', type=str, help='Path to channel info file',
+                        required=True)
     parser.add_argument('--epochs', type=int, default=5, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=0.00001,
+    parser.add_argument('--learning_rate', type=float, default=1e-3,
                         help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=1e-6,
+                        help='Weight decay rate')
     parser.add_argument('--validation', type=float, default=0.1,
                         help='Fraction of the data that is used as validation (0-1)')
     parser.add_argument('--loss_win_size', type=float, default=11,
@@ -125,7 +129,7 @@ def main(args):
     loss_params['K'] = (args.loss_K1, args.loss_K2)
 
     try:
-        
+
         train_net(net=net,
                   device=device,
                   dataset=ds,
@@ -133,7 +137,7 @@ def main(args):
                   batch_size=args.batch_size,
                   learning_rate=args.learning_rate,
                   weight_decay=args.weight_decay,
-                  validation_fraction=args.validation_fraction,
+                  validation_fraction=args.validation,
                   loss_params=loss_params)
 
     except KeyboardInterrupt:

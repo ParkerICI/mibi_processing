@@ -28,7 +28,7 @@ class BackgroundSubtractionDataset(Dataset):
         
         self.gold_patches = dict()
         self.chan_patches = dict()
-        self.range = (0, 0)
+        self.range = [0, 0]
 
         pm = PatchMaker(image_size=image_size, kernel_size=patch_size, stride=patch_stride)
 

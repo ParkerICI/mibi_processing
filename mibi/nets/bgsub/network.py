@@ -4,7 +4,6 @@ import torch.nn.init as nn_init
 
 def init_weights(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-        print('Initializing layer weights')
         nn_init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
         if m.bias is not None:
             nn_init.constant_(m.bias, 0)

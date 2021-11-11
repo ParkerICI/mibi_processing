@@ -10,7 +10,7 @@ from scipy.ndimage import gaussian_filter
 
 from sklearn.linear_model import Ridge
 
-from .knn_denoise import knn_denoise
+from mibi.preprocess.knn_denoise import knn_denoise
 
 LABEL_DESC = {'12_C':'Carbon',
               '23_Na':'Sodium',
