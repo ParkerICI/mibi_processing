@@ -19,4 +19,4 @@ dependencies:
   - pip:
     - mat73
     - medpy
-    - pytorch-misssim
+    - pytorch-msssim

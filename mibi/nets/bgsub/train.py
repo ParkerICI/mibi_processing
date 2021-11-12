@@ -1,6 +1,10 @@
 import argparse
 import logging
 import sys
+import time
+import json
+
+import numpy as np
 
 import torch
 from torch import optim
@@ -28,16 +32,17 @@ def train_net(net,
               batch_size: int = 7,
               learning_rate: float = 0.001,
               weight_decay: float = 1,
-              validation_fraction: float = 0.1,
-              loss_params: dict = DEFAULT_LOSS_PARAMS):
+              validation_fraction: float = 0.25,
+              loss_params: dict = DEFAULT_LOSS_PARAMS,
+              model_desc='default'):
     
     # 1. Split into train / validation partitions
     n_val = int(len(dataset) * validation_fraction)
     n_train = len(dataset) - n_val
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    train_set, val_set = random_split(dataset, [n_train, n_val])
 
     # 2. Create data loaders
-    loader_args = dict(batch_size=batch_size, num_workers=4, pin_memory=True)
+    loader_args = dict(batch_size=batch_size)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
@@ -56,34 +61,67 @@ def train_net(net,
 
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
+    def loss_func(chan_batch, bg_batch):
+        transformed_batch = net(chan_batch, bg_batch)
+        bg_sim = ms_ssim_loss(transformed_batch, bg_batch)
+        chan_sim = ms_ssim_loss(transformed_batch, chan_batch)
+        return 0.5*bg_sim - 0.5*chan_sim
+
     # 4. Begin training
-    all_losses = list()
+    all_train_losses = list()
     for epoch_num in range(epochs):
         epoch_losses = list()
-
+        
         for batch_num,(bg_batch,chan_batch) in enumerate(train_loader):
-            bg_batch = bg_batch.to(device=device, dtype=torch.float32)
-            chan_batch = chan_batch.to(device=device, dtype=torch.float32)
 
-            transformed_batch = net(chan_batch, bg_batch)
+            start_time = time.time()
 
-            bg_sim = ms_ssim_loss(transformed_batch, bg_batch)
-            chan_sim = ms_ssim_loss(transformed_batch, chan_batch)
+            net.train()
+            if device.type != 'cpu':
+                bg_batch = bg_batch.to(device=device, dtype=torch.float32)
+                chan_batch = chan_batch.to(device=device, dtype=torch.float32)
 
-            loss = 0.5*bg_sim - 0.5*chan_sim
-
+            loss = loss_func(chan_batch, bg_batch)
             epoch_losses.append(loss)
-
-            if batch_num % 5 == 0:
-                print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}")
 
             loss.backward()
             optimizer.step()
 
-        all_losses.append(epoch_losses)
+            elapsed_time = time.time() - start_time
+            if batch_num % 1 == 0:
+                print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
+        
+        all_train_losses.append(epoch_losses)
+
+        # run validation
+        with torch.no_grad():
+            start_time = time.time()
+
+            net.eval()
+            validation_losses = list()
+            for batch_num,(bg_batch,chan_batch) in enumerate(val_loader):
+                loss = loss_func(chan_batch, bg_batch)
+                validation_losses.append(loss)    
+            validation_loss_mean = torch.mean(torch.tensor(validation_losses))
+            validation_loss_sd = torch.std(torch.tensor(validation_losses))
+            elapsed_time = time.time() - start_time
+            print(f"Epoch {epoch_num}, validation loss={validation_loss_mean:.6f} +/- {validation_loss_sd:.6f}, time={elapsed_time:.2f}s")
+
+    # save parameters
+    all_params = dict()
+    all_params.update(loss_params)
+    all_params['learning_rate'] = learning_rate
+    all_params['weight_decay'] = weight_decay
+    all_params['epochs'] = epochs
+    all_params['batch_size'] = batch_size
+    all_params['validation_loss_mean'] = float(validation_loss_mean.detach().numpy())
+    all_params['validation_loss_sd'] = float(validation_loss_sd.detach().numpy())
 
     # save trained model
-    torch.save(net.state_dict(), "bgsub+noise_net.dict.zip")
+    out_fname = f"{model_desc}_network"
+    torch.save(net.state_dict(), f"{out_fname}.pytorch.zip")
+    with open(f"{model_desc}_params.json", 'w') as f:
+        json.dump(all_params, f, indent=4)
 
 
 def get_args():
@@ -109,7 +147,6 @@ def get_args():
     parser.add_argument('--loss_K2', type=float, default=0.03,
                         help='K2 param for MS_SSIM loss')
 
-
     return parser.parse_args()
 
 
@@ -121,7 +158,8 @@ def main(args):
     ds = BackgroundSubtractionDataset(args.images_dir, args.channel_file)
     net = BGSubAndDenoisier()
 
-    net.to(device=device)
+    if device.type != 'cpu':
+        net.to(device=device)
 
     loss_params = DEFAULT_LOSS_PARAMS
     loss_params['win_size'] = args.loss_win_size
@@ -141,7 +179,7 @@ def main(args):
                   loss_params=loss_params)
 
     except KeyboardInterrupt:
-        torch.save(net.state_dict(), 'INTERRUPTED.pth')
+        torch.save(net.state_dict(), 'INTERRUPTED.pytorch.zip')
         logging.info('Saved interrupt')
         sys.exit(0)
 
