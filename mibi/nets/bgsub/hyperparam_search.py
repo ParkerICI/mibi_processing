@@ -5,6 +5,7 @@ def generate_hyperparam_file(loss_win_sizes=[11, 25],
                              learning_rates=[1e-3, 1e-2, 1e-1],
                              weight_decays=[0., 1e-3, 1],
                              epochs=[5],
+                             batch_size=20,
                              num_runs=5,
                              base_dir='/home/mschachter/CHOP_TMA_pilot',
                              base_cmd='python mibi/nets/bgsub/train.py'):
@@ -23,7 +24,8 @@ def generate_hyperparam_file(loss_win_sizes=[11, 25],
                                        'learning_rate':f"{learning_rate:.6f}",
                                        'epochs':f"{epoch}",
                                        'images_dir':img_dir,
-                                       'channel_file':chan_file
+                                       'channel_file':chan_file,
+                                       'batch_size':batch_size
                                       })
 
     cmds = list()
