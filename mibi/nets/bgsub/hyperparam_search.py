@@ -30,8 +30,10 @@ def generate_hyperparam_file(loss_win_sizes=[10, 25],
     for k,params in enumerate(all_params):
         for j in range(num_runs):
             model_desc = f'hyperparam_search_{k}_{j}'
-            cmd = base_cmd + ' ' + ' '.join([f'--{p} {v}' for p,v in params.items()]) + f'--model_desc {model_desc}'
-            cmds.append(cmd)
+            all_strs = [base_cmd]
+            all_strs.extend([f'--{p} {v}' for p,v in params.items()])
+            all_strs.append(f'--model_desc {model_desc}')
+            cmds.append(' '.join(all_strs))
 
     print('# of total jobs: ', len(cmds))
 
