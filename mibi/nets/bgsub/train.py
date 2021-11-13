@@ -36,6 +36,8 @@ def train_net(net,
               loss_params: dict = DEFAULT_LOSS_PARAMS,
               model_desc='default'):
     
+    training_start_time = time.time()
+
     # 1. Split into train / validation partitions
     n_val = int(len(dataset) * validation_fraction)
     n_train = len(dataset) - n_val
@@ -88,7 +90,7 @@ def train_net(net,
             optimizer.step()
 
             elapsed_time = time.time() - start_time
-            if batch_num % 1 == 0:
+            if batch_num % 20 == 0:
                 print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
         
         all_train_losses.append(epoch_losses)
@@ -110,6 +112,8 @@ def train_net(net,
             elapsed_time = time.time() - start_time
             print(f"Epoch {epoch_num}, validation loss={validation_loss_mean:.6f} +/- {validation_loss_sd:.6f}, time={elapsed_time:.2f}s")
 
+    training_elapsed_time = time.time() - training_start_time
+
     # save parameters
     all_params = dict()
     all_params.update(loss_params)
@@ -119,6 +123,8 @@ def train_net(net,
     all_params['batch_size'] = batch_size
     all_params['validation_loss_mean'] = float(validation_loss_mean.detach().numpy())
     all_params['validation_loss_sd'] = float(validation_loss_sd.detach().numpy())
+    all_params['training_elapsed_time'] = training_elapsed_time
+    all_params['model_desc'] = model_desc
 
     # save trained model
     out_fname = f"{model_desc}_network"
@@ -149,6 +155,8 @@ def get_args():
                         help='K1 param for MS_SSIM loss')
     parser.add_argument('--loss_K2', type=float, default=0.03,
                         help='K2 param for MS_SSIM loss')
+    parser.add_argument('--model_desc', type=str, default='default',
+                        help='File pattern for model outputs.')
 
     return parser.parse_args()
 
@@ -179,7 +187,8 @@ def main(args):
                   learning_rate=args.learning_rate,
                   weight_decay=args.weight_decay,
                   validation_fraction=args.validation,
-                  loss_params=loss_params)
+                  loss_params=loss_params,
+                  model_desc=args.model_desc)
 
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pytorch.zip')
