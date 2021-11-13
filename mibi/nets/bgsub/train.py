@@ -100,6 +100,9 @@ def train_net(net,
             net.eval()
             validation_losses = list()
             for batch_num,(bg_batch,chan_batch) in enumerate(val_loader):
+                if device.type != 'cpu':
+                    bg_batch = bg_batch.to(device=device, dtype=torch.float32)
+                    chan_batch = chan_batch.to(device=device, dtype=torch.float32)    
                 loss = loss_func(chan_batch, bg_batch)
                 validation_losses.append(loss)    
             validation_loss_mean = torch.mean(torch.tensor(validation_losses))
