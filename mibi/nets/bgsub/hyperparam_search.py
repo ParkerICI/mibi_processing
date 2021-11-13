@@ -1,7 +1,7 @@
 import os
 
 
-def generate_hyperparam_file(loss_win_sizes=[10, 25],
+def generate_hyperparam_file(loss_win_sizes=[11, 25],
                              learning_rates=[1e-3, 1e-2, 1e-1],
                              weight_decays=[0., 1e-3, 1],
                              epochs=[5],
