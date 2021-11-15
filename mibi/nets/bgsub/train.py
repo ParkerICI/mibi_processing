@@ -5,6 +5,7 @@ import time
 import json
 
 import numpy as np
+import pandas as pd
 
 import torch
 from torch import optim
@@ -13,7 +14,7 @@ from torch.utils.data import DataLoader, random_split
 from pytorch_msssim import MS_SSIM
 
 from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
-from mibi.nets.bgsub.network import BGSubAndDenoisier
+from mibi.nets.bgsub.network import BGSubAndDenoiser
 
 DEFAULT_LOSS_PARAMS = {
                        "size_average": True,
@@ -70,10 +71,13 @@ def train_net(net,
         return 0.5*bg_sim - 0.5*chan_sim
 
     # 4. Begin training
-    all_train_losses = list()
+    df_loss = {'epoch':list(),
+               'train_mean':list(), 'train_sd':list(),
+               'validation_mean':list(), 'validation_sd':list()}
+
     for epoch_num in range(epochs):
-        epoch_losses = list()
-        
+
+        train_losses = list()
         for batch_num,(bg_batch,chan_batch) in enumerate(train_loader):
 
             start_time = time.time()
@@ -84,7 +88,7 @@ def train_net(net,
                 chan_batch = chan_batch.to(device=device, dtype=torch.float32)
 
             loss = loss_func(chan_batch, bg_batch)
-            epoch_losses.append(loss)
+            train_losses.append(loss)
 
             loss.backward()
             optimizer.step()
@@ -93,9 +97,8 @@ def train_net(net,
             if batch_num % 20 == 0:
                 print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
         
-        all_train_losses.append(epoch_losses)
-
         # run validation
+        validation_losses = list()
         with torch.no_grad():
             start_time = time.time()
 
@@ -107,12 +110,31 @@ def train_net(net,
                     chan_batch = chan_batch.to(device=device, dtype=torch.float32)    
                 loss = loss_func(chan_batch, bg_batch)
                 validation_losses.append(loss)    
-            validation_loss_mean = torch.mean(torch.tensor(validation_losses))
-            validation_loss_sd = torch.std(torch.tensor(validation_losses))
             elapsed_time = time.time() - start_time
-            print(f"Epoch {epoch_num}, validation loss={validation_loss_mean:.6f} +/- {validation_loss_sd:.6f}, time={elapsed_time:.2f}s")
+
+        train_loss_mean = torch.mean(torch.tensor(train_losses))
+        train_loss_sd = torch.std(torch.tensor(train_losses))        
+        validation_loss_mean = torch.mean(torch.tensor(validation_losses))
+        validation_loss_sd = torch.std(torch.tensor(validation_losses))
+
+        df_loss['epoch'].append(epoch_num)
+        df_loss['train_mean'].append(train_loss_mean)
+        df_loss['train_sd'].append(train_loss_sd)
+        df_loss['validation_mean'].append(validation_loss_mean)
+        df_loss['validation_sd'].append(validation_loss_sd)
+
+        print(f"""----- Epoch {epoch_num} ------
+        training loss={train_loss_mean:.6f} +/- {train_loss_sd:.6f}
+        validation loss={validation_loss_mean:.6f} +/- {validation_loss_sd:.6f}
+        elapsed time={elapsed_time:.2f}s
+        """
+        )
 
     training_elapsed_time = time.time() - training_start_time
+
+    # save losses
+    df_loss = pd.DataFrame(df_loss)
+    df_loss.to_csv(f"{model_desc}_losses.csv", header=True, index=False)
 
     # save parameters
     all_params = dict()
@@ -167,7 +189,7 @@ def main(args):
     print(f'Using device {device}')
 
     ds = BackgroundSubtractionDataset(args.images_dir, args.channel_file)
-    net = BGSubAndDenoisier()
+    net = BGSubAndDenoiser()
 
     if device.type != 'cpu':
         net.to(device=device)
