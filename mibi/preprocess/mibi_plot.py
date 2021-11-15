@@ -56,8 +56,7 @@ def plot_intensity_vs_area(df_region, ax, area_thresh=3):
 
 
 def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, transform=True,
-                    show_raw=True, show_hist=True, show_bgsub=False,
-                    show_threshold=False, show_denoised=True,
+                    transforms_to_show=['raw', 'hist', 'denoise'],
                     plot_height=4, plot_width=3, output_file=None):
 
     chan_indices = list()
@@ -66,7 +65,7 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, 
     else:
         chan_indices = mp_img.df_channel.index.values
 
-    ncols = np.sum([show_hist, show_raw, show_bgsub, show_threshold, show_denoised])
+    ncols = len(transforms_to_show)
     nrows = len(chan_indices)
     fig_width = plot_height*ncols
     fig_height = plot_width*nrows
@@ -75,42 +74,24 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, 
     gs = plt.GridSpec(nrows, ncols)
 
     for row,chan_idx in enumerate(chan_indices):
-
         chan_label = mp_img.df_channel.loc[chan_idx]['Label']
         chan_desc = mp_img.df_channel.loc[chan_idx]['Description']
         side_title = f"{chan_label}: {chan_desc}"
 
         col = 0
-        if show_hist:
-            ax = fig.add_subplot(gs[row, col])
-            plot_hist(mp_img.X[chan_idx, :, :], exclude_zeros=True, ax=ax)
-            if col == 0:
-                plt.ylabel(side_title)
-            col += 1
-        if show_raw:
-            ax = fig.add_subplot(gs[row, col])
-            plot_img(mp_img.X[chan_idx, :, :], title='RAW', transform=transform)
-            if col == 0:
-                plt.ylabel(side_title)
-            col += 1
-        if show_bgsub:
-            ax = fig.add_subplot(gs[row, col])
-            plot_img(mp_img.X_bgsub[chan_idx], title='BG_SUBTRACTED', transform=transform)
-            if col == 0:
-                plt.ylabel(side_title)
-            col += 1
-        if show_threshold:
-            ax = fig.add_subplot(gs[row, col])
-            plot_img(mp_img.X_thresh[chan_idx], title='THRESHOLDED', transform=transform)
-            if col == 0:
-                plt.ylabel(side_title)
-            col += 1
-        if show_denoised:
-            ax = fig.add_subplot(gs[row, col])
-            plot_img(mp_img.X_denoise[chan_idx], title='DENOISED', transform=transform)
-            if col == 0:
-                plt.ylabel(side_title)
-            col += 1
+        for name in transforms_to_show:
+            if name == 'hist':
+                ax = fig.add_subplot(gs[row, col])
+                plot_hist(mp_img.X['raw'][chan_idx, :, :], exclude_zeros=True, ax=ax)
+                if col == 0:
+                    plt.ylabel(side_title)
+                col += 1
+            else:
+                ax = fig.add_subplot(gs[row, col])
+                plot_img(mp_img.X[name][chan_idx, :, :], title=name, transform=transform)
+                if col == 0:
+                    plt.ylabel(side_title)
+                col += 1    
 
     plt.tight_layout()
 

@@ -41,11 +41,8 @@ LABEL_DESC = {'12_C':'Carbon',
 class MIBIMultiplexImage(object):
 
     def __init__(self):
-        self.X = None
-        self.X_bgsub = dict()
-        self.X_thresh = dict()
-        self.X_denoise = dict()
-        
+        self.X = dict()
+
         self.df_channel = None
     
         self.gold_channel_label = '197_Au'
@@ -76,7 +73,7 @@ class MIBIMultiplexImage(object):
 
             images.append(img)
 
-        mp_img.X = np.array(images)
+        mp_img.X['raw'] = np.array(images)
     
         return mp_img
 
@@ -124,8 +121,8 @@ class MIBIMultiplexImage(object):
             dep_names = ', '.join([self.df_channel.loc[k]['Label'] for k in deps])
             if debug:
                 print(f'Regressing on {chan_label}, deps={dep_names}')
-            y = self.X[chan_idx, :, :].ravel()
-            R = self.X[deps, :, :].reshape([len(deps), -1]).T
+            y = self.X['raw'][chan_idx, :, :].ravel()
+            R = self.X['raw'][deps, :, :].reshape([len(deps), -1]).T
 
             rr = Ridge(fit_intercept=False, positive=True)
             rr.fit(R, y)
@@ -133,33 +130,33 @@ class MIBIMultiplexImage(object):
         self.bgsub_coefs = coefs
 
         # perform background subtraction using regression coefficients 
-        self.X_bgsub = dict()
+        self.X['bgsub'] = dict()
         for chan_idx, weights in coefs.items():
-            img = self.X[chan_idx, :, :].copy()
+            img = self.X['bgsub'][chan_idx, :, :].copy()
             deps = channel_dependencies[chan_idx]
             for dep_chan_idx,w in zip(deps, weights):
-                S = self.X[dep_chan_idx, :, :]
+                S = self.X['bgsub'][dep_chan_idx, :, :]
                 img -= w*S
             img[img < 0] = 0
-            self.X_bgsub[chan_idx] = img
+            self.X['bgsub'][chan_idx] = img
 
     def threshold(self, percentile_threshold=50, debug=False):
         """ Threshold out all pixels below the given percentile of the channel's intensity histogram. """
-        self.X_thresh = dict()
+        self.X['thresh'] = dict()
 
-        for chan_idx,img in self.X_bgsub.items():
+        for chan_idx,img in self.X['bgusb'].items():
             nz = img > 0
             thresh = np.percentile(img[nz].ravel(), percentile_threshold)
             if debug:
                 print(f"{self.df_channel.loc[chan_idx]['Label']} q{percentile_threshold}={thresh:0.3f}")
             q_img = img.copy() 
             q_img[q_img < thresh] = 0.
-            self.X_thresh[chan_idx] = q_img
+            self.X['thresh'][chan_idx] = q_img
 
     def denoise(self):
-        self.X_denoise = dict()
-        for chan_idx,img in self.X_thresh.items():
-            self.X_denoise[chan_idx] = knn_denoise(img)
+        self.X['denoise'] = dict()
+        for chan_idx,img in self.X['thresh'].items():
+            self.X['denoise'][chan_idx] = knn_denoise(img)
 
     def preprocess(self, debug=False):
         self.bg_subtract(debug=debug)

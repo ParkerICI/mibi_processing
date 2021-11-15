@@ -2,11 +2,11 @@ import os
 
 
 def generate_hyperparam_file(loss_win_sizes=[11, 25],
-                             learning_rates=[1e-3, 1e-2, 1e-1],
-                             weight_decays=[0., 1e-3, 1],
-                             epochs=[5],
+                             learning_rates=[1e-3],
+                             weight_decays=[0, 1],
+                             epochs=[100],
                              batch_size=20,
-                             num_runs=5,
+                             num_runs=10,
                              base_dir='/home/mschachter/CHOP_TMA_pilot',
                              base_cmd='python mibi/nets/bgsub/train.py'):
 

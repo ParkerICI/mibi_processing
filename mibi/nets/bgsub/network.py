@@ -9,9 +9,9 @@ def init_weights(m):
             nn_init.constant_(m.bias, 0)
 
 
-class BGSubAndDenoisier(nn.Module):
+class BGSubAndDenoiser(nn.Module):
     def __init__(self, num_preproc_channels=32):
-        super(BGSubAndDenoisier, self).__init__()
+        super(BGSubAndDenoiser, self).__init__()
         
         self.bg_preproc = nn.Conv2d(in_channels=1, out_channels=num_preproc_channels,
                                     kernel_size=3, padding=1)
@@ -60,4 +60,12 @@ class BGSubAndDenoisier(nn.Module):
         #print('out_img.shape=',out_img.shape)
         
         return out_img
+
+    @staticmethod
+    def load_from_file(file_path, device=None):
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        net = BGSubAndDenoiser()
+        net.load_state_dict(torch.load(file_path, map_location=device))
+        net.eval()
+        return net
     
