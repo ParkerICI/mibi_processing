@@ -4,9 +4,10 @@ import os
 def generate_hyperparam_file(loss_win_sizes=[11, 25],
                              learning_rates=[1e-3],
                              weight_decays=[0, 1],
-                             epochs=[100],
+                             epochs=[10, 25, 50, 100],
                              batch_size=20,
                              num_runs=10,
+                             param_prefix='hyperparam_search',
                              base_dir='/home/mschachter/CHOP_TMA_pilot',
                              base_cmd='python mibi/nets/bgsub/train.py'):
 
@@ -31,7 +32,7 @@ def generate_hyperparam_file(loss_win_sizes=[11, 25],
     cmds = list()
     for k,params in enumerate(all_params):
         for j in range(num_runs):
-            model_desc = f'hyperparam_search_{k}_{j}'
+            model_desc = f'{param_prefix}_{k}_{j}'
             all_strs = [base_cmd]
             all_strs.extend([f'--{p} {v}' for p,v in params.items()])
             all_strs.append(f'--model_desc {model_desc}')
@@ -43,7 +44,7 @@ def generate_hyperparam_file(loss_win_sizes=[11, 25],
         f.write('\n'.join(cmds))
 
 if __name__ == '__main__':
-    generate_hyperparam_file()
+    generate_hyperparam_file(param_prefix='hyperparam_epoch_search')
 
 
 

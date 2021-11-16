@@ -118,10 +118,10 @@ def train_net(net,
         validation_loss_sd = torch.std(torch.tensor(validation_losses))
 
         df_loss['epoch'].append(epoch_num)
-        df_loss['train_mean'].append(train_loss_mean)
-        df_loss['train_sd'].append(train_loss_sd)
-        df_loss['validation_mean'].append(validation_loss_mean)
-        df_loss['validation_sd'].append(validation_loss_sd)
+        df_loss['train_mean'].append(train_loss_mean.detach().numpy())
+        df_loss['train_sd'].append(train_loss_sd.detach().numpy())
+        df_loss['validation_mean'].append(validation_loss_mean.detach().numpy())
+        df_loss['validation_sd'].append(validation_loss_sd.detach().numpy())
 
         print(f"""----- Epoch {epoch_num} ------
         training loss={train_loss_mean:.6f} +/- {train_loss_sd:.6f}
