@@ -3,7 +3,8 @@ import os
 
 def generate_hyperparam_file(learning_rates=[1e-3, 1e-1],
                              weight_decays=[0, 1],
-                             epochs=[25],
+                             energy_coefs=[1e-6, 1e-3, 1],
+                             epochs=[20],
                              batch_size=30,
                              num_runs=5,
                              param_prefix='hyperparam_search',
@@ -18,13 +19,15 @@ def generate_hyperparam_file(learning_rates=[1e-3, 1e-1],
     for learning_rate in learning_rates:
         for weight_decay in weight_decays:
             for epoch in epochs:
-                all_params.append({'weight_decay':f"{weight_decay:.6f}",
-                                    'learning_rate':f"{learning_rate:.6f}",
-                                    'epochs':f"{epoch}",
-                                    'images_dir':img_dir,
-                                    'channel_file':chan_file,
-                                    'batch_size':batch_size
-                                    })
+                for energy_coef in energy_coefs:
+                    all_params.append({'weight_decay':f"{weight_decay:.6f}",
+                                        'learning_rate':f"{learning_rate:.6f}",
+                                        'epochs':f"{epoch}",
+                                        'images_dir':img_dir,
+                                        'channel_file':chan_file,
+                                        'batch_size':batch_size,
+                                        'energy_coef':energy_coef
+                                        })
 
     cmds = list()
     for k,params in enumerate(all_params):

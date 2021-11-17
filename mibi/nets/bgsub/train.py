@@ -22,6 +22,7 @@ def train_net(net,
               learning_rate: float = 0.001,
               weight_decay: float = 1,
               validation_fraction: float = 0.25,
+              energy_coef = 1.,
               model_desc='default'):
     
     training_start_time = time.time()
@@ -47,20 +48,16 @@ def train_net(net,
     ''')
 
     # 3. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    #logcos_sim = lambda x,y: torch.log(torch.sum(x*y)) - \
-    #            0.5*torch.log(torch.sum(torch.pow(x, 2))) - \
-    #            0.5*torch.log(torch.sum(torch.pow(y, 2)))
-
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def loss_func(chan_batch, bg_batch):
         transformed_batch = net(chan_batch, bg_batch)
-        batch_sum = torch.sum(transformed_batch)
-        if batch_sum < 1e-9:
-            print('transformed batch_sum is very low: ', batch_sum)
+        batch_energy = torch.sum(torch.pow(transformed_batch, 2))
+        if batch_energy < 1e-9:
+            print('transformed batch energy is very low: ', batch_energy)
         return torch.log(torch.sum(transformed_batch * bg_batch)) - \
                 torch.log(torch.sum(transformed_batch * chan_batch)) - \
-                torch.log(torch.sum(transformed_batch))
+                energy_coef*torch.log(batch_energy)
 
     # 4. Begin training
     df_loss = {'epoch':list(),
@@ -88,7 +85,7 @@ def train_net(net,
             elapsed_time = time.time() - start_time
             if batch_num % 20 == 0:
                 print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
-        
+
         # run validation
         validation_losses = list()
         with torch.no_grad():
@@ -138,6 +135,7 @@ def train_net(net,
     all_params['validation_loss_sd'] = float(validation_loss_sd.detach().numpy())
     all_params['training_elapsed_time'] = training_elapsed_time
     all_params['model_desc'] = model_desc
+    all_params['energy_coef'] = energy_coef
 
     # save trained model
     out_fname = f"{model_desc}_network"
@@ -158,6 +156,8 @@ def get_args():
                         help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-6,
                         help='Weight decay rate')
+    parser.add_argument('--energy_coef', type=float, default=1,
+                        help='Coefficient for energy regularization')
     parser.add_argument('--validation', type=float, default=0.1,
                         help='Fraction of the data that is used as validation (0-1)')
     parser.add_argument('--model_desc', type=str, default='default',
@@ -187,7 +187,8 @@ def main(args):
                   learning_rate=args.learning_rate,
                   weight_decay=args.weight_decay,
                   validation_fraction=args.validation,
-                  model_desc=args.model_desc)
+                  model_desc=args.model_desc,
+                  energy_coef=args.energy_coef)
 
     except KeyboardInterrupt:
         torch.save(net.state_dict(), 'INTERRUPTED.pytorch.zip')
