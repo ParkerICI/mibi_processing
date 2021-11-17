@@ -85,9 +85,6 @@ def train_net(net,
             elapsed_time = time.time() - start_time
             if batch_num % 20 == 0:
                 print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
-
-            if batch_num == 0:
-                break
         
         # run validation
         validation_losses = list()
