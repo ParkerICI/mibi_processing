@@ -11,20 +11,8 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader, random_split
 
-from pytorch_msssim import MS_SSIM
-
 from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
 from mibi.nets.bgsub.network import BGSubAndDenoiser
-
-DEFAULT_LOSS_PARAMS = {
-                       "size_average": True,
-                       "win_size": 11,
-                       "win_sigma": 1.5,
-                       "channel": 1,
-                       "spatial_dims": 2,
-                       "weights": None,
-                       "K": (0.01, 0.03)
-                      }
 
 def train_net(net,
               device,
@@ -34,7 +22,6 @@ def train_net(net,
               learning_rate: float = 0.001,
               weight_decay: float = 1,
               validation_fraction: float = 0.25,
-              loss_params: dict = DEFAULT_LOSS_PARAMS,
               model_desc='default'):
     
     training_start_time = time.time()
@@ -60,14 +47,16 @@ def train_net(net,
     ''')
 
     # 3. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    ms_ssim_loss = MS_SSIM(data_range=dataset.range[1], **loss_params)
-
+    logcos_sim = lambda x,y: torch.log(torch.sum(x*y)) - \
+                0.5*torch.log(torch.sum(torch.pow(x, 2))) - \
+                0.5*torch.log(torch.sum(torch.pow(y, 2)))
+    
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def loss_func(chan_batch, bg_batch):
         transformed_batch = net(chan_batch, bg_batch)
-        bg_sim = ms_ssim_loss(transformed_batch, bg_batch)
-        chan_sim = ms_ssim_loss(transformed_batch, chan_batch)
+        bg_sim = logcos_sim(transformed_batch, bg_batch)
+        chan_sim = logcos_sim(transformed_batch, chan_batch)
         return 0.5*bg_sim - 0.5*chan_sim
 
     # 4. Begin training
@@ -96,6 +85,9 @@ def train_net(net,
             elapsed_time = time.time() - start_time
             if batch_num % 20 == 0:
                 print(f"Epoch {epoch_num}, batch {batch_num}: loss={loss:.6f}, time={elapsed_time:.2f}s")
+
+            if batch_num == 0:
+                break
         
         # run validation
         validation_losses = list()
@@ -138,7 +130,6 @@ def train_net(net,
 
     # save parameters
     all_params = dict()
-    all_params.update(loss_params)
     all_params['learning_rate'] = learning_rate
     all_params['weight_decay'] = weight_decay
     all_params['epochs'] = epochs
@@ -169,14 +160,6 @@ def get_args():
                         help='Weight decay rate')
     parser.add_argument('--validation', type=float, default=0.1,
                         help='Fraction of the data that is used as validation (0-1)')
-    parser.add_argument('--loss_win_size', type=float, default=11,
-                        help='Window size for MS_SSIM loss')
-    parser.add_argument('--loss_win_sigma', type=float, default=1.5,
-                        help='Window size for MS_SSIM loss')
-    parser.add_argument('--loss_K1', type=float, default=0.01,
-                        help='K1 param for MS_SSIM loss')
-    parser.add_argument('--loss_K2', type=float, default=0.03,
-                        help='K2 param for MS_SSIM loss')
     parser.add_argument('--model_desc', type=str, default='default',
                         help='File pattern for model outputs.')
 
@@ -194,11 +177,6 @@ def main(args):
     if device.type != 'cpu':
         net.to(device=device)
 
-    loss_params = DEFAULT_LOSS_PARAMS
-    loss_params['win_size'] = args.loss_win_size
-    loss_params['win_sigma'] = args.loss_win_sigma
-    loss_params['K'] = (args.loss_K1, args.loss_K2)
-
     try:
 
         train_net(net=net,
@@ -209,7 +187,6 @@ def main(args):
                   learning_rate=args.learning_rate,
                   weight_decay=args.weight_decay,
                   validation_fraction=args.validation,
-                  loss_params=loss_params,
                   model_desc=args.model_desc)
 
     except KeyboardInterrupt:

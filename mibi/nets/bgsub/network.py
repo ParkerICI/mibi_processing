@@ -6,7 +6,7 @@ def init_weights(m):
     if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
         nn_init.kaiming_normal_(m.weight, a=0, mode='fan_in', nonlinearity='relu')
         if m.bias is not None:
-            nn_init.constant_(m.bias, 0)
+            nn_init.constant_(m.bias, 0.1)
 
 
 class BGSubAndDenoiser(nn.Module):
@@ -26,13 +26,15 @@ class BGSubAndDenoiser(nn.Module):
                              kernel_size=3, padding=1)
         self.mix_act = nn.ReLU(inplace=True)
         
-        num_compression_channels = num_mix_channels // 2
-        self.compression = nn.Conv2d(in_channels=num_mix_channels, out_channels=num_compression_channels,
-                                     kernel_size=3, padding=1)
-        self.compression_act = nn.ReLU(inplace=True)
+        num_compression_channels = 1
+        self.compress = nn.Conv2d(in_channels=num_mix_channels, out_channels=num_compression_channels,
+                                     kernel_size=3, padding=0, stride=2)
+        self.compress_act = nn.ReLU(inplace=True)
         
-        self.out = nn.Conv2d(in_channels=num_compression_channels, out_channels=1,
-                             kernel_size=3, padding=1)
+        self.out = nn.ConvTranspose2d(in_channels=num_compression_channels, out_channels=1,
+                                      kernel_size=3, stride=2, padding=0, output_padding=1,
+                                      dilation=1)
+
         self.out_act = nn.ReLU(inplace=True)
 
         self.apply(init_weights)
@@ -53,7 +55,7 @@ class BGSubAndDenoiser(nn.Module):
         mixed_img = self.mix_act(self.mix(combined_img))
         #print('mixed_img.shape=',mixed_img.shape)
         
-        compressed_img = self.compression_act(self.compression(mixed_img))
+        compressed_img = self.compress_act(self.compress(mixed_img))
         #print('compressed_img.shape=',compressed_img.shape)
         
         out_img = self.out_act(self.out(compressed_img))
