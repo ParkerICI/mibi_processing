@@ -55,8 +55,12 @@ def train_net(net,
 
     def loss_func(chan_batch, bg_batch):
         transformed_batch = net(chan_batch, bg_batch)
+        batch_sum = torch.sum(transformed_batch)
+        if batch_sum < 1e-9:
+            print('transformed batch_sum is very low: ', batch_sum)
         return torch.log(torch.sum(transformed_batch * bg_batch)) - \
-                torch.log(torch.sum(transformed_batch * chan_batch))
+                torch.log(torch.sum(transformed_batch * chan_batch)) - \
+                torch.log(torch.sum(transformed_batch))
 
     # 4. Begin training
     df_loss = {'epoch':list(),
