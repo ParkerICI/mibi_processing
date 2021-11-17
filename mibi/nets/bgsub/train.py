@@ -47,17 +47,16 @@ def train_net(net,
     ''')
 
     # 3. Set up the optimizer, the loss, the learning rate scheduler and the loss scaling for AMP
-    logcos_sim = lambda x,y: torch.log(torch.sum(x*y)) - \
-                0.5*torch.log(torch.sum(torch.pow(x, 2))) - \
-                0.5*torch.log(torch.sum(torch.pow(y, 2)))
-    
+    #logcos_sim = lambda x,y: torch.log(torch.sum(x*y)) - \
+    #            0.5*torch.log(torch.sum(torch.pow(x, 2))) - \
+    #            0.5*torch.log(torch.sum(torch.pow(y, 2)))
+
     optimizer = optim.SGD(net.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def loss_func(chan_batch, bg_batch):
         transformed_batch = net(chan_batch, bg_batch)
-        bg_sim = logcos_sim(transformed_batch, bg_batch)
-        chan_sim = logcos_sim(transformed_batch, chan_batch)
-        return 0.5*bg_sim - 0.5*chan_sim
+        return torch.log(torch.sum(transformed_batch * bg_batch)) - \
+                torch.log(torch.sum(transformed_batch * chan_batch))
 
     # 4. Begin training
     df_loss = {'epoch':list(),
