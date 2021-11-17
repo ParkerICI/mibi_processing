@@ -1,10 +1,10 @@
 import os
 
 
-def generate_hyperparam_file(learning_rates=[1e-3, 1e-1],
+def generate_hyperparam_file(learning_rates=[1e-3],
                              weight_decays=[0, 1],
-                             energy_coefs=[1e-6, 1e-3, 1],
-                             epochs=[20],
+                             energy_coefs=[1e-3, 1],
+                             epochs=[10],
                              batch_size=30,
                              num_runs=5,
                              param_prefix='hyperparam_search',

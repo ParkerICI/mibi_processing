@@ -9,6 +9,7 @@ import pandas as pd
 
 import torch
 from torch import optim
+from torch._C import Value
 from torch.utils.data import DataLoader, random_split
 
 from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
@@ -54,7 +55,8 @@ def train_net(net,
         transformed_batch = net(chan_batch, bg_batch)
         batch_energy = torch.sum(torch.pow(transformed_batch, 2))
         if batch_energy < 1e-9:
-            print('transformed batch energy is very low: ', batch_energy)
+            msg = f"transformed batch energy is very low: {batch_energy.detach().numpy()}"
+            raise RuntimeError(msg)
         return torch.log(torch.sum(transformed_batch * bg_batch)) - \
                 torch.log(torch.sum(transformed_batch * chan_batch)) - \
                 energy_coef*torch.log(batch_energy)
