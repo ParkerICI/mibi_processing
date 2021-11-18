@@ -2,10 +2,10 @@ import os
 
 
 def generate_hyperparam_file(learning_rates=[1e-3],
-                             weight_decays=[0, 1],
-                             energy_coefs=[1e-3, 1],
-                             epochs=[10],
-                             batch_size=30,
+                             weight_decays=[1],
+                             energy_coefs=[1e-3, 1, 10, 100],
+                             epochs=[25, 50],
+                             batch_size=25,
                              num_runs=5,
                              param_prefix='hyperparam_search',
                              base_dir='/home/mschachter/CHOP_TMA_pilot',

@@ -1,7 +1,7 @@
 import os
 import argparse
 
-from tifffile import TiffFile
+from tifffile import TiffFile, imsave
 
 import numpy as np
 import pandas as pd
@@ -62,7 +62,7 @@ class MIBIMultiplexImage(object):
         for lbl in mp_img.df_channel['Label']:
             tiff_file = os.path.join(img_dir, f'{lbl}.tif')
             if not os.path.exists(tiff_file):
-                print('Missing channel: {tiff_file}')
+                print(f'Missing channel: {tiff_file}')
                 img = np.zeros([1024, 1024])*np.nan
             else:
                 tf = TiffFile(tiff_file)
@@ -132,10 +132,10 @@ class MIBIMultiplexImage(object):
         # perform background subtraction using regression coefficients 
         self.X['bgsub'] = dict()
         for chan_idx, weights in coefs.items():
-            img = self.X['bgsub'][chan_idx, :, :].copy()
+            img = self.X['raw'][chan_idx, :, :].copy()
             deps = channel_dependencies[chan_idx]
             for dep_chan_idx,w in zip(deps, weights):
-                S = self.X['bgsub'][dep_chan_idx, :, :]
+                S = self.X['raw'][dep_chan_idx, :, :]
                 img -= w*S
             img[img < 0] = 0
             self.X['bgsub'][chan_idx] = img
@@ -144,7 +144,7 @@ class MIBIMultiplexImage(object):
         """ Threshold out all pixels below the given percentile of the channel's intensity histogram. """
         self.X['thresh'] = dict()
 
-        for chan_idx,img in self.X['bgusb'].items():
+        for chan_idx,img in self.X['bgsub'].items():
             nz = img > 0
             thresh = np.percentile(img[nz].ravel(), percentile_threshold)
             if debug:
@@ -163,6 +163,22 @@ class MIBIMultiplexImage(object):
         self.threshold(debug=debug)
         self.denoise()
 
+    def write(self, output_dir, transform='denoise'):
+        img_dir = os.path.join(output_dir, transform)
+        if not os.path.exists(img_dir):
+            os.makedirs(img_dir, exist_ok=True)
+        images = self.X[transform]
+        if isinstance(images, dict):
+            chan_indices = images.keys()
+        else:
+            chan_indices = self.included_channel_indices()
+
+        index2label = {k:lbl for lbl,k in self.label_to_index.items()}
+        for chan_idx in chan_indices:
+            chan_label = index2label[chan_idx]
+            fname = os.path.join(img_dir, f"{chan_label}.tiff")
+            img = self.X[transform][chan_idx].astype('float32')
+            imsave(fname, img)
 
 def main(args):
     pass

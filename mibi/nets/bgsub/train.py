@@ -55,7 +55,7 @@ def train_net(net,
         transformed_batch = net(chan_batch, bg_batch)
         batch_energy = torch.sum(torch.pow(transformed_batch, 2))
         if batch_energy < 1e-9:
-            msg = f"transformed batch energy is very low: {batch_energy.detach().numpy()}"
+            msg = f"transformed batch energy is very low: {batch_energy}"
             raise RuntimeError(msg)
         return torch.log(torch.sum(transformed_batch * bg_batch)) - \
                 torch.log(torch.sum(transformed_batch * chan_batch)) - \

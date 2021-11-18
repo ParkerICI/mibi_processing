@@ -88,10 +88,14 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, 
                 col += 1
             else:
                 ax = fig.add_subplot(gs[row, col])
-                plot_img(mp_img.X[name][chan_idx, :, :], title=name, transform=transform)
+                if isinstance(mp_img.X[name], dict):
+                    img = mp_img.X[name][chan_idx]
+                else:
+                    img = mp_img.X[name][chan_idx, :, :]
+                plot_img(img, title=name, transform=transform)
                 if col == 0:
                     plt.ylabel(side_title)
-                col += 1    
+                col += 1
 
     plt.tight_layout()
 
