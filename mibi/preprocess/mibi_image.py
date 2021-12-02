@@ -1,5 +1,4 @@
 import os
-import argparse
 
 from tifffile import TiffFile, imsave
 
@@ -9,6 +8,8 @@ import pandas as pd
 from scipy.ndimage import gaussian_filter
 
 from sklearn.linear_model import Ridge
+
+from skimage.filters import farid_h, farid_v
 
 from mibi.preprocess.knn_denoise import knn_denoise
 
@@ -36,6 +37,23 @@ LABEL_DESC = {'12_C':'Carbon',
               '181_Ta':'Tantalum',
               '197_Au':'Gold'
             }
+
+IMAGE_STATS_PERCENTILES = (1, 10, 25, 50, 75, 90, 99)
+
+def image_stats(img, percentiles=IMAGE_STATS_PERCENTILES):
+    d = dict()
+    i = img > 0
+    d['intensity_sparsity'] = (~i).sum() / np.prod(img.shape)
+    
+    d['percentiles'] = percentiles
+    d['intensity_percentiles'] = np.percentile(img[i].ravel(), percentiles)
+    
+    grad_img = np.concatenate([farid_h(img), farid_v(img)])
+    i = grad_img > 0
+    d['grad_sparsity'] = (~i).sum() / np.prod(grad_img.shape)
+    d['grad_percentiles'] = np.percentile(grad_img[i].ravel(), percentiles)
+    
+    return d
 
 
 class MIBIMultiplexImage(object):
@@ -158,6 +176,35 @@ class MIBIMultiplexImage(object):
         for chan_idx,img in self.X['thresh'].items():
             self.X['denoise'][chan_idx] = knn_denoise(img)
 
+    def stats(self, transform='raw'):
+        
+        if transform == 'raw':
+            chan_indices = self.included_channel_indices()
+        else:
+            chan_indices = self.X[transform].keys()
+
+        df = {'channel_index':list(),
+              'channel_label':list(),
+              'sparsity':list()
+              }
+        for p in IMAGE_STATS_PERCENTILES:
+            df[f'intensity_p{p}'] = list()
+            df[f'grad_p{p}'] = list()
+        
+        for chan_idx in chan_indices:
+            chan_info = self.df_channel.loc[chan_idx]
+            istats = image_stats(self.X[transform][chan_idx],
+                                 IMAGE_STATS_PERCENTILES)
+
+            df['channel_index'].append(chan_idx)
+            df['channel_label'].append(chan_info['Label'])
+            df['sparsity'].append(istats['intensity_sparsity'])
+            for k,p in enumerate(IMAGE_STATS_PERCENTILES):
+                df[f'intensity_p{p}'].append(istats['intensity_percentiles'][k])
+                df[f'grad_p{p}'].append(istats['grad_percentiles'][k])
+            
+        return pd.DataFrame(df)
+
     def preprocess(self, debug=False):
         self.bg_subtract(debug=debug)
         self.threshold(debug=debug)
@@ -179,19 +226,3 @@ class MIBIMultiplexImage(object):
             fname = os.path.join(img_dir, f"{chan_label}.tiff")
             img = self.X[transform][chan_idx].astype('float32')
             imsave(fname, img)
-
-def main(args):
-    pass
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Run FastICA on a set of .tiff files in a directory.')
-    parser.add_argument('--input_dir', type=str, help="A directory that contains tiff files.")
-    parser.add_argument('--output_dir', type=str, help="Directory to write output tiff files to")
-    parser.add_argument('--smooth', type=bool, help="Smooth inputs with 1px Gaussian before ICA", default=False)
-    parser.add_argument('--files', default=None,
-                        help='Comma-separated list of filenames within input_dir to process.')
-
-    args = parser.parse_args()
-
-    main(args)

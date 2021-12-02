@@ -26,6 +26,7 @@ def plot_hist(img : np.ndarray, ax=None, exclude_zeros=True, channel_label=''):
     sns.histplot(x, bins=25, ax=ax)
     plt.title(f"{channel_label}; zfrac={zero_frac:.2f}")
     ax.set_yscale('log')
+    plt.autoscale(tight=True)
 
 
 def plot_img(img : np.ndarray, title='', transform=True):
@@ -42,6 +43,7 @@ def plot_img(img : np.ndarray, title='', transform=True):
     plt.yticks([])
     plt.colorbar()
     plt.title(title)
+    plt.autoscale(tight=True)
 
 
 def plot_intensity_vs_area(df_region, ax, area_thresh=3):
@@ -96,6 +98,7 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, 
                 if col == 0:
                     plt.ylabel(side_title)
                 col += 1
+            plt.autoscale(tight=True)
 
     plt.tight_layout()
 
