@@ -48,7 +48,10 @@ def image_stats(img, percentiles=IMAGE_STATS_PERCENTILES):
     d['percentiles'] = percentiles
     d['intensity_percentiles'] = np.percentile(img[i].ravel(), percentiles)
     
-    grad_img = np.concatenate([farid_h(img), farid_v(img)])
+    p99 = np.percentile(img.ravel(), 99)
+    img_norm = img / p99
+    img_norm[img_norm > 1] = 0
+    grad_img = np.concatenate([farid_h(img_norm), farid_v(img_norm)])
     i = grad_img > 0
     d['grad_sparsity'] = (~i).sum() / np.prod(grad_img.shape)
     d['grad_percentiles'] = np.percentile(grad_img[i].ravel(), percentiles)

@@ -14,9 +14,15 @@ dependencies:
   - seaborn
   - py-opencv
   - pip
+  - statsmodels
+  - numba
+  - pytables
   - pytorch::pytorch
   - pytorch::torchvision
+  - conda-forge::python-igraph
+  - conda-forge::leidenalg
   - pip:
     - mat73
     - medpy
     - pytorch-msssim
+    - scanpy
