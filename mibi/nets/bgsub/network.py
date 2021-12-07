@@ -1,3 +1,5 @@
+import numpy as np
+
 import torch
 import torch.nn as nn
 import torch.nn.init as nn_init
@@ -70,4 +72,20 @@ class BGSubAndDenoiser(nn.Module):
         net.load_state_dict(torch.load(file_path, map_location=device))
         net.eval()
         return net
-    
+
+class BGSubtractRegression(nn.Module):
+
+    def __init__(self, mask_matrix):
+        super(BGSubAndDenoiser, self).__init__()
+
+        self.num_channels = mask_matrix.shape[0]
+        self.M = torch.tensor(mask_matrix.astype('float32'))
+
+        W = np.random.rand(self.num_channels, self.num_channels)*mask_matrix*1e-1
+        self.W = torch.tensor(W)
+
+        self.act = nn.ReLU(inplace=True)
+
+    def forward(self, img):
+        """ Expects image of shape (nbatch, height, width, nchans) """
+        return torch.matmul(img, self.act(self.M*self.W))

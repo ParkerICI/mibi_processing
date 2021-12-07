@@ -4,20 +4,19 @@ import sys
 import time
 import json
 
-import numpy as np
 import pandas as pd
 
 import torch
+
 from torch import optim
-from torch._C import Value
 from torch.utils.data import DataLoader, random_split
 
-from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
+from mibi.nets.bgsub.dataset_patches import BackgroundSubtractionPatchesDataset
 from mibi.nets.bgsub.network import BGSubAndDenoiser
 
 def train_net(net,
               device,
-              dataset : BackgroundSubtractionDataset,
+              dataset : BackgroundSubtractionPatchesDataset,
               epochs: int = 5,
               batch_size: int = 7,
               learning_rate: float = 0.001,
@@ -173,7 +172,7 @@ def main(args):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Using device {device}')
 
-    ds = BackgroundSubtractionDataset(args.images_dir, args.channel_file)
+    ds = BackgroundSubtractionPatchesDataset(args.images_dir, args.channel_file)
     net = BGSubAndDenoiser()
 
     if device.type != 'cpu':

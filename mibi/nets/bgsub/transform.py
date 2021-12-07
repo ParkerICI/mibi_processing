@@ -2,10 +2,10 @@ from typing import Sequence
 
 import torch
 
-from mibi.nets.bgsub.dataset import BackgroundSubtractionDataset
+from mibi.nets.bgsub.dataset_patches import BackgroundSubtractionPatchesDataset
 from mibi.nets.bgsub.network import BGSubAndDenoiser
 
-def transform_fovs(ds : BackgroundSubtractionDataset,
+def transform_fovs(ds : BackgroundSubtractionPatchesDataset,
                    fov_names : Sequence[str],
                    net : BGSubAndDenoiser) -> dict:
 

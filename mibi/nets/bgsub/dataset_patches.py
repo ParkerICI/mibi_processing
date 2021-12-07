@@ -19,7 +19,7 @@ def patch_and_swap(patch_maker, img):
     return img_patches.permute([2, 0, 1])
 
 
-class BackgroundSubtractionDataset(Dataset):
+class BackgroundSubtractionPatchesDataset(Dataset):
 
     def __init__(self, images_dir, channels_data_path, patch_size=512, image_size=(1024, 1024),
                  patch_stride=256,
