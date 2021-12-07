@@ -49,7 +49,7 @@ class BackgroundSubtractionRegressionDataset(Dataset):
         return self.X.shape[0]
 
     def __getitem__(self, index):
-        assert index < self.X.shape[0] - 1, f"index={index}, but len(X)={len(self.X)}"
+        assert index < self.X.shape[0], f"index={index}, but len(X)={len(self.X)}"
         return self.X[index]
 
 

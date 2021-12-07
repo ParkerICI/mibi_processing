@@ -76,13 +76,16 @@ class BGSubAndDenoiser(nn.Module):
 class BGSubtractRegression(nn.Module):
 
     def __init__(self, mask_matrix):
-        super(BGSubAndDenoiser, self).__init__()
+        super(BGSubtractRegression, self).__init__()
 
         self.num_channels = mask_matrix.shape[0]
-        self.M = torch.tensor(mask_matrix.astype('float32'))
+        if torch.is_tensor(mask_matrix):
+            self.M = mask_matrix
+        else:
+            self.M = torch.tensor(mask_matrix, dtype=torch.float32)
 
-        W = np.random.rand(self.num_channels, self.num_channels)*mask_matrix*1e-1
-        self.W = torch.tensor(W)
+        W = np.random.rand(self.num_channels, self.num_channels)*mask_matrix.clone().detach().numpy()*1e-1
+        self.W = torch.nn.Parameter(torch.tensor(W.astype('float32')))
 
         self.act = nn.ReLU(inplace=True)
 
