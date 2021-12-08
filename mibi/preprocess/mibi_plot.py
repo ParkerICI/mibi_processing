@@ -29,19 +29,18 @@ def plot_hist(img : np.ndarray, ax=None, exclude_zeros=True, channel_label=''):
     plt.autoscale(tight=True)
 
 
-def plot_img(img : np.ndarray, title='', transform=True, saturate=True):
+def plot_img(img : np.ndarray, title='', transform=True, saturate_percentile=95):
     if transform:
         img_trans = clean_trans(np.arcsinh, img)
     else:
         img_trans = img
     
-    if saturate:
+    if saturate_percentile < 100:
         nz = img_trans > 0
         if nz.sum() > 0:
-            vmax = np.percentile(img_trans[nz].ravel(), 95)
+            vmax = np.percentile(img_trans[nz].ravel(), saturate_percentile)
     else:
         vmax = img_trans.max()
-    nz = img_trans > 0
     
     plt.imshow(img_trans, interpolation='nearest', aspect='auto', cmap=plt.cm.afmhot, vmin=0, vmax=vmax)
     plt.xlabel('')
@@ -65,7 +64,7 @@ def plot_intensity_vs_area(df_region, ax, area_thresh=3):
 
 
 def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True,
-                    transform=False, saturate=False,
+                    transform=False, saturate_percentile=100,
                     transforms_to_show=['raw', 'hist', 'denoise'],
                     plot_height=4, plot_width=3, output_file=None):
 
@@ -77,8 +76,8 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True,
 
     ncols = len(transforms_to_show)
     nrows = len(chan_indices)
-    fig_width = plot_height*ncols
-    fig_height = plot_width*nrows
+    fig_width = plot_width*ncols
+    fig_height = plot_height*nrows
     
     fig = plt.figure(figsize=(fig_width, fig_height))
     gs = plt.GridSpec(nrows, ncols)
@@ -102,7 +101,7 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True,
                     img = mp_img.X[name][chan_idx]
                 else:
                     img = mp_img.X[name][chan_idx, :, :]
-                plot_img(img, title=name, transform=transform, saturate=saturate)
+                plot_img(img, title=name, transform=transform, saturate_percentile=saturate_percentile)
                 if col == 0:
                     plt.ylabel(side_title)
                 col += 1
