@@ -88,15 +88,15 @@ class BGSubtractRegression(nn.Module):
         W[0, 0] = 1. # gold channel should always be able to predict itself
         self.W = torch.nn.Parameter(torch.tensor(W.astype('float32')))
 
-        self.act = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, img):
         """ Expects image of shape (nbatch, height, width, nchans) """
-        return torch.matmul(img, self.act(self.M*self.W))
+        return torch.matmul(img, self.relu(self.M*self.W))
 
     def get_comp_matrix(self):
-        W = self.act(self.M*self.W)
-        return W.detach().numpy()
+        C = self.relu(self.M*self.W)
+        return C.detach().numpy()
 
     @staticmethod
     def load_from_file(file_path, mask_matrix, device=None):

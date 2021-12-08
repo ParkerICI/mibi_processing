@@ -29,13 +29,20 @@ def plot_hist(img : np.ndarray, ax=None, exclude_zeros=True, channel_label=''):
     plt.autoscale(tight=True)
 
 
-def plot_img(img : np.ndarray, title='', transform=True):
+def plot_img(img : np.ndarray, title='', transform=True, saturate=True):
     if transform:
         img_trans = clean_trans(np.arcsinh, img)
     else:
         img_trans = img
+    
+    if saturate:
+        nz = img_trans > 0
+        if nz.sum() > 0:
+            vmax = np.percentile(img_trans[nz].ravel(), 95)
+    else:
+        vmax = img_trans.max()
     nz = img_trans > 0
-    vmax = np.percentile(img_trans[nz].ravel(), 95)
+    
     plt.imshow(img_trans, interpolation='nearest', aspect='auto', cmap=plt.cm.afmhot, vmin=0, vmax=vmax)
     plt.xlabel('')
     plt.ylabel('')
@@ -57,7 +64,8 @@ def plot_intensity_vs_area(df_region, ax, area_thresh=3):
             print(f"Error with kdeplot, i.sum()={i.sum()}")
 
 
-def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, transform=True,
+def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True,
+                    transform=False, saturate=False,
                     transforms_to_show=['raw', 'hist', 'denoise'],
                     plot_height=4, plot_width=3, output_file=None):
 
@@ -94,7 +102,7 @@ def plot_mibi_image(mp_img : MIBIMultiplexImage, exclude_ignored_channels=True, 
                     img = mp_img.X[name][chan_idx]
                 else:
                     img = mp_img.X[name][chan_idx, :, :]
-                plot_img(img, title=name, transform=transform)
+                plot_img(img, title=name, transform=transform, saturate=saturate)
                 if col == 0:
                     plt.ylabel(side_title)
                 col += 1

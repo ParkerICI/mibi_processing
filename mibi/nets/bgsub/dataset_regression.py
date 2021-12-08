@@ -19,6 +19,7 @@ class BackgroundSubtractionRegressionDataset(Dataset):
         # stack up all the images in a tensor of shape (nfovs, nchans, height, width)
         chan_indices = None
         X = list()
+        df = {'fov':list()}
         for pdir in glob.glob(os.path.join(images_dir, f'{fov_prefix}*')):
             _,pname = os.path.split(pdir)
             print(f"Loading from {pdir}")
@@ -32,6 +33,7 @@ class BackgroundSubtractionRegressionDataset(Dataset):
 
             img = mp_img.X['raw'][chan_indices, :, :].astype('float32')
             X.append(torch.tensor(img))
+            df['fov'].append(pname)
         
         X = torch.stack(X)
 
@@ -44,6 +46,7 @@ class BackgroundSubtractionRegressionDataset(Dataset):
 
         self.chan_indices = chan_indices
         self.chan_names = [df_channel.loc[chan_idx]['Label'] for chan_idx in chan_indices]
+        self.df = pd.DataFrame(df)
 
     def __len__(self):
         return self.X.shape[0]
