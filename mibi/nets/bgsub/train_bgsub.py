@@ -2,6 +2,8 @@ import argparse
 import logging
 import sys
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -63,6 +65,15 @@ def main(args):
         logging.info('Saved interrupt')
         sys.exit(0)
 
+    # load trained model
+    param_file = f'{args.model_desc}_network.pytorch.zip'
+    net = BGSubtractRegression.load_from_file(param_file, ds.M)
+
+    # write compensation matrix to file
+    W = net.get_comp_matrix()
+    np.savetxt('comp_matrix.csv', W, delimiter=',', fmt='%0.6f')
+    with open('comp_matrix_channels.csv', 'w') as f:
+        f.write(','.join(ds.chan_names))
 
 if __name__ == '__main__':
     args = get_args()
