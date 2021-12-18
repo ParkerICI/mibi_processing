@@ -1,6 +1,6 @@
 import os
 
-from tifffile import TiffFile, imsave
+from tifffile import TiffFile, TiffWriter, imsave
 
 import numpy as np
 import pandas as pd
@@ -240,15 +240,24 @@ class MIBIMultiplexImage(object):
             
         return pd.DataFrame(df)
 
+    def apply_compensation_matrix(self, C, channel_names):
+        chan_indices = [self.label_to_index[c] for c in channel_names]
+        X = self.X['raw'][chan_indices]
+        Xt = np.transpose(X, axes=[1, 2, 0])
+        Xbgsub = Xt - np.dot(Xt, C)
+        Xbgsub[Xbgsub < 0] = 0
+        self.X['bgsub'] = dict()
+        for k,chan_idx in enumerate(chan_indices[1:]):
+            self.X['bgsub'][chan_idx] = Xbgsub[:, :, k+1]
+
     def preprocess(self, debug=False):
         self.bg_subtract(debug=debug)
         self.threshold(debug=debug)
         self.denoise()
 
-    def write(self, output_dir, transform='denoise'):
-        img_dir = os.path.join(output_dir, transform)
-        if not os.path.exists(img_dir):
-            os.makedirs(img_dir, exist_ok=True)
+    def write(self, output_dir, file_base_name=None, transform='denoise', multi_page=True):
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
         images = self.X[transform]
         if isinstance(images, dict):
             chan_indices = images.keys()
@@ -256,8 +265,24 @@ class MIBIMultiplexImage(object):
             chan_indices = self.included_channel_indices()
 
         index2label = {k:lbl for lbl,k in self.label_to_index.items()}
-        for chan_idx in chan_indices:
-            chan_label = index2label[chan_idx]
-            fname = os.path.join(img_dir, f"{chan_label}.tiff")
-            img = self.X[transform][chan_idx].astype('float32')
-            imsave(fname, img)
+
+        if multi_page:
+            assert file_base_name is not None, "file_base_name must be specified when multi_page=True"
+
+            fname = os.path.join(output_dir, f"{file_base_name}.tiff")
+            with TiffWriter(fname) as tif:
+                for chan_idx in chan_indices:
+                    chan_label = index2label[chan_idx]
+                    img = self.X[transform][chan_idx].astype('float32')
+                    page_name_tag = (285, 's', 1, chan_label, True)
+                    tif.save(img, description=chan_label, metadata=None, extratags=[page_name_tag])
+
+        else:            
+            for chan_idx in chan_indices:
+                chan_label = index2label[chan_idx]            
+                img = self.X[transform][chan_idx].astype('float32')
+                if file_base_name is None:
+                    fname = os.path.join(output_dir, f"{chan_label}.tiff")
+                else:
+                    fname = os.path.join(output_dir, f"{file_base_name}_{chan_label}.tiff")
+                imsave(fname, img)
